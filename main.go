@@ -73,12 +73,54 @@ func extractVehicles(jsonData string) []Vehicle {
 	return root.Payload.VehicleModelHU
 }
 
+// fetchKiaModels sends a POST request to the Kia API and returns the response body as a string.
+func fetchKiaModels(modelYear, modelName string) string {
+	url := "https://owners.kia.com/apps/services/owners/apigwServlet.html"
+	method := "POST"
+
+	payload := strings.NewReader(`{"modelYear":"` + modelYear + `","modelName":"` + modelName + `"}`)
+
+	client := &http.Client{}
+	req, err := http.NewRequest(method, url, payload)
+	if err != nil {
+		log.Printf("error creating request: %v", err)
+		return ""
+	}
+
+	req.Header.Add("apiurl", "/cmm/gam")
+	req.Header.Add("httpmethod", "POST")
+	req.Header.Add("servicetype", "preLogin")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Cookie", "JSESSIONID=node0yylo8a6pta1i1k223hsnpthra22417789.node0; UqZBpD3n3iPIDwJU=v1Lmxeg++Csg8; JSESSIONID=node0w4vwjewq0a67kzv9r2hwhyvm159764.node0")
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("error sending request: %v", err)
+		return ""
+	}
+	defer func() {
+		if cerr := res.Body.Close(); cerr != nil {
+			log.Printf("error closing response body: %v", cerr)
+		}
+	}()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Printf("error reading response body: %v", err)
+		return ""
+	}
+
+	return string(body)
+}
+
 func main() {
 	response := fetchKiaData()
 	// log.Println(response)
 
 	vehicles := extractVehicles(response)
 	for _, car := range vehicles {
-		fmt.Printf("Model Year: %d, Model Name: %s\n", car.ModelYear, car.ModelName)
+		modelsResponse := fetchKiaModels(fmt.Sprintf("%d", car.ModelYear), car.ModelName)
+		// Process modelsResponse as needed
+		fmt.Printf("Models Response: %s\n", modelsResponse)
 	}
 }
