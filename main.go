@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -113,14 +114,34 @@ func fetchKiaModels(modelYear, modelName string) string {
 	return string(body)
 }
 
+// Append and write to file
+func appendAndWriteToFile(path string, content string) {
+	filePath, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	_, err = filePath.WriteString(content + "\n")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	err = filePath.Close()
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 func main() {
 	response := fetchKiaData()
 	// log.Println(response)
 
 	vehicles := extractVehicles(response)
-	for _, car := range vehicles {
+	for index, car := range vehicles {
 		modelsResponse := fetchKiaModels(fmt.Sprintf("%d", car.ModelYear), car.ModelName)
 		// Process modelsResponse as needed
 		fmt.Printf("Models Response: %s\n", modelsResponse)
+		appendAndWriteToFile("kia_models.json", modelsResponse)
+		if index == 0 {
+			break
+		}
 	}
 }
