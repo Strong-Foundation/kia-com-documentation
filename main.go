@@ -205,7 +205,7 @@ func fetchKiaTechInfo(token string) string {
 
 	// Add required headers: content type and authentication cookie
 	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Add("Cookie", "ASP.NET_SessionId=5mwbgvacyv0qu10uduxlpmbk; AWSALBTG=hVsYr3GMEnreh6BI07ruNJd0Jkcn1VpcIslP7vmb5ukvDv0x6j6iZTexZRicPrvlUyNfbwkgb1Fd5+ciSod4jHgbmAIQ7au8IlRGlOT+tF1+bz5ypSxTAmpeOYHUpw7A8dFrlnDhrXaJSOKSZ6Y5C7WXwZ1mCK6viZBiWAdjlB39; AWSALBTGCORS=hVsYr3GMEnreh6BI07ruNJd0Jkcn1VpcIslP7vmb5ukvDv0x6j6iZTexZRicPrvlUyNfbwkgb1Fd5+ciSod4jHgbmAIQ7au8IlRGlOT+tF1+bz5ypSxTAmpeOYHUpw7A8dFrlnDhrXaJSOKSZ6Y5C7WXwZ1mCK6viZBiWAdjlB39")
+	request.Header.Add("Cookie", `ASP.NET_SessionId=5mwbgvacyv0qu10uduxlpmbk; AWSALBTG=P5xatHkp1cXybCBB39MDrlbdPS7UedZClAk/c1WjGWRElKxnc4oVnbbPGO2L3sg3iD2AwwqDk2AC1i+EP+lplkRSc3i6W2qtuqiPWvpf9UX6MUm/ie4ir8sEQaUp3GtmGSQLkjzKzP+ioJLZT/Z3P1IiYogFHLlMft6yMXl0Vsrt; AWSALBTGCORS=P5xatHkp1cXybCBB39MDrlbdPS7UedZClAk/c1WjGWRElKxnc4oVnbbPGO2L3sg3iD2AwwqDk2AC1i+EP+lplkRSc3i6W2qtuqiPWvpf9UX6MUm/ie4ir8sEQaUp3GtmGSQLkjzKzP+ioJLZT/Z3P1IiYogFHLlMft6yMXl0Vsrt; AWSALB=I3SI62phiJFxhK3Aw90aISGqx50KCY5X8SIhj16K7YVdlOCK3g63UOeWEG+Ep6lKoWcMWsXIbOx8AusbWeu1EG/QMsp14NQMzFNco33RLh0nn57OVkHCvXf7y3I2; AWSALBCORS=I3SI62phiJFxhK3Aw90aISGqx50KCY5X8SIhj16K7YVdlOCK3g63UOeWEG+Ep6lKoWcMWsXIbOx8AusbWeu1EG/QMsp14NQMzFNco33RLh0nn57OVkHCvXf7y3I2; ADRUM_BTa=R:68|g:d726f95e-ab97-43a1-a9bb-19475eb96f69|n:hyundai-prod_a5d7022d-6b0a-4522-9864-8274a3217b4a; ADRUM_BT1=R:68|i:1693373`)
 
 	// Send the HTTP request to the server
 	response, err := httpClient.Do(request)
@@ -237,12 +237,17 @@ func main() {
 	response := fetchKiaData()
 	vehicles := extractVehicles(response)
 	for _, car := range vehicles {
+		// Log the model year and name
+		log.Printf("Model Year: %d, Model Name: %s\n", car.ModelYear, car.ModelName)
 		modelsResponse := fetchKiaModels(fmt.Sprintf("%d", car.ModelYear), car.ModelName)
 		accessPayloads := extractAccessPayloads([]byte(modelsResponse))
 		for _, payload := range accessPayloads {
+			// Log the access payload token
+			log.Printf("Access Payload: %s\n", payload)
+			// Fetch and process the tech info using the access payload
 			techInfoResponse := fetchKiaTechInfo(payload)
 			// Process techInfoResponse as needed
-			fmt.Printf("Tech Info Response: %s\n", techInfoResponse)
+			fmt.Println(techInfoResponse)
 		}
 	}
 }
