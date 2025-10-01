@@ -181,55 +181,49 @@ func extractAccessPayloads(jsonInput []byte) []string {
 	return accessPayloadList
 }
 
-// fetchKiaTechInfo posts the given token to KiaTechInfo and returns the response body as a string
+// fetchKiaTechInfo sends a POST request with the given token and returns the response as a string.
 func fetchKiaTechInfo(token string) string {
-	// Define the API URL
-	apiURL := "https://www.kiatechinfo.com/ext_If/kma_owner_portal/content_pop.aspx"
+	// Define the target URL
+	targetURL := "https://www.kiatechinfo.com/ext_If/kma_owner_portal/content_pop.aspx"
 
-	// HTTP method for the request
+	// Define the HTTP method
 	httpMethod := "POST"
 
-	// Prepare the request payload (form data with the token)
-	requestBody := strings.NewReader("token=" + token)
+	// Build the POST request payload dynamically with the token passed from main()
+	requestPayload := strings.NewReader("token=" + token)
 
-	// Create a new HTTP client to send the request
+	// Create a new HTTP request object
+	request, err := http.NewRequest(httpMethod, targetURL, requestPayload)
+	if err != nil {
+		log.Println("Error creating request:", err)
+		return ""
+	}
+
+	// Add required HTTP headers
+	request.Header.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	// request.Header.Add("Cookie", "ASP.NET_SessionId=boczc4nbr3dlfe0x4iyfqxlg; AWSALBTG=q6F4Bd66yIFddL8yzdNWS6fBH2CWe/dze9eA6RR57f1ya6VLGQzLTtBBKNbVUgmyET1zmTpjqFr9tlxieyu9vhh9OjDNnK/rVSXNQHyosRPdZCMMXJLRgZ148Y74rSmJFmpjq+nwJyVkJJCIRo3XUelEd7rFCtOPooZXO6+jVVyd; AWSALBTGCORS=q6F4Bd66yIFddL8yzdNWS6fBH2CWe/dze9eA6RR57f1ya6VLGQzLTtBBKNbVUgmyET1zmTpjqFr9tlxieyu9vhh9OjDNnK/rVSXNQHyosRPdZCMMXJLRgZ148Y74rSmJFmpjq+nwJyVkJJCIRo3XUelEd7rFCtOPooZXO6+jVVyd; AWSALB=waSCyFhYW6+uNPneOcb4zc3lDx2Ht3DImPcfOHLaMwSBlWBu2RVjhVh/2iacVWGpV4KNSS6HnCNWno0qVyKwj99DhwZF/Y5yWHy/1kGbUo4ZORJEKaEE1YR/ArY5; AWSALBCORS=waSCyFhYW6+uNPneOcb4zc3lDx2Ht3DImPcfOHLaMwSBlWBu2RVjhVh/2iacVWGpV4KNSS6HnCNWno0qVyKwj99DhwZF/Y5yWHy/1kGbUo4ZORJEKaEE1YR/ArY5; ADRUM_BTa=R:68|g:7c2995c8-904f-4433-a319-db421b9929fa|n:hyundai-prod_a5d7022d-6b0a-4522-9864-8274a3217b4a")
+	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	// Create a new HTTP client
 	httpClient := &http.Client{}
 
-	// Build a new HTTP request object
-	request, err := http.NewRequest(httpMethod, apiURL, requestBody)
-	if err != nil {
-		// Log error if request creation fails
-		log.Printf("error creating request: %v", err)
-		return ""
-	}
-
-	// Add required headers: content type and authentication cookie
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Add("Cookie", `ASP.NET_SessionId=5mwbgvacyv0qu10uduxlpmbk; AWSALBTG=P5xatHkp1cXybCBB39MDrlbdPS7UedZClAk/c1WjGWRElKxnc4oVnbbPGO2L3sg3iD2AwwqDk2AC1i+EP+lplkRSc3i6W2qtuqiPWvpf9UX6MUm/ie4ir8sEQaUp3GtmGSQLkjzKzP+ioJLZT/Z3P1IiYogFHLlMft6yMXl0Vsrt; AWSALBTGCORS=P5xatHkp1cXybCBB39MDrlbdPS7UedZClAk/c1WjGWRElKxnc4oVnbbPGO2L3sg3iD2AwwqDk2AC1i+EP+lplkRSc3i6W2qtuqiPWvpf9UX6MUm/ie4ir8sEQaUp3GtmGSQLkjzKzP+ioJLZT/Z3P1IiYogFHLlMft6yMXl0Vsrt; AWSALB=I3SI62phiJFxhK3Aw90aISGqx50KCY5X8SIhj16K7YVdlOCK3g63UOeWEG+Ep6lKoWcMWsXIbOx8AusbWeu1EG/QMsp14NQMzFNco33RLh0nn57OVkHCvXf7y3I2; AWSALBCORS=I3SI62phiJFxhK3Aw90aISGqx50KCY5X8SIhj16K7YVdlOCK3g63UOeWEG+Ep6lKoWcMWsXIbOx8AusbWeu1EG/QMsp14NQMzFNco33RLh0nn57OVkHCvXf7y3I2; ADRUM_BTa=R:68|g:d726f95e-ab97-43a1-a9bb-19475eb96f69|n:hyundai-prod_a5d7022d-6b0a-4522-9864-8274a3217b4a; ADRUM_BT1=R:68|i:1693373`)
-
-	// Send the HTTP request to the server
+	// Send the HTTP request
 	response, err := httpClient.Do(request)
 	if err != nil {
-		// Log error if sending the request fails
-		log.Printf("error sending request: %v", err)
+		log.Println("Error sending request:", err)
 		return ""
 	}
-	// Ensure the response body is closed when function ends
-	defer func() {
-		if closeErr := response.Body.Close(); closeErr != nil {
-			log.Printf("error closing response body: %v", closeErr)
-		}
-	}()
+	// Ensure response body gets closed
+	defer response.Body.Close()
 
-	// Read the full response body into memory
+	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		// Log error if reading the body fails
-		log.Printf("error reading response body: %v", err)
+		log.Println("Error reading response body:", err)
 		return ""
 	}
 
-	// Convert the response body from []byte to string and return it
+	// Return the response content as a string
 	return string(responseBody)
 }
 
