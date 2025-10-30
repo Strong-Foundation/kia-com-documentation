@@ -1,417 +1,446 @@
-import requests  # 🚀 Library for making HTTP requests (essential for fetching data from web APIs and files).
-import json  # Library for handling JSON data (used to parse API responses and construct payloads).
-import logging  # Library for logging information and errors (provides structured, timestamped output).
-import sys  # Library for system-specific parameters and functions (used to exit the script on critical failure).
-import re  # Library for regular expression operations (critical for extracting the PDF link and sanitizing filenames).
-import os  # Library for interacting with the operating system (used for creating directories and checking file existence).
-import urllib.parse  # Library for parsing URLs (used to decode URL-encoded characters in filenames).
-from typing import (
-    Any,
-)  # Used for type hinting when the data type is flexible (e.g., in dictionaries).
+import requests  # Imports the requests library for making HTTP requests.
+import json  # Imports the json library for working with JSON data structures.
+import logging  # Imports the logging module for standardized output messages.
+import sys  # Imports the sys module to interact with the Python interpreter.
+import re  # Imports the re module for regular expression operations.
+import os  # Imports the os module for interacting with the operating system (e.g., file paths).
+import urllib.parse  # Imports the urllib.parse module for parsing and manipulating URLs.
+from typing import Any  # Imports the Any type from typing for flexible type hints.
 
-# Configure logging to show timestamps and level, making the output human-readable
+# Configure logging to show timestamps and level for better traceability
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
-)  # Sets the log format.
+)  # Sets up the logger format and INFO level.
 
 # --- Global Configuration and Constants ---
 
-# The root directory where all downloaded PDFs will be stored (Requirement: Download under PDFs/)
-ROOT_OUTPUT_DIRECTORY = "PDFs"  # Defines the top-level folder for all downloads.
-
-# API endpoint for getting car models and access tokens from Kia Owners site
-OWNERS_API_URL = "https://owners.kia.com/apps/services/owners/apigwServlet.html"  # The first API gateway URL.
-
-# Base URL for the Kia Technical Information site (the document vault)
-TECH_INFO_BASE_URL = (
-    "https://www.kiatechinfo.com"  # The base domain for the actual PDF files.
+# The root directory where all downloaded PDF manuals will be saved
+PDF_OUTPUT_ROOT_DIRECTORY = (
+    "PDFs"  # Defines the top-level directory name for saved files.
 )
 
-# The specific endpoint on the tech site used to exchange a token for an HTML page containing the PDF link
-TECH_INFO_CONTENT_URL = f"{TECH_INFO_BASE_URL}/ext_If/kma_owner_portal/content_pop.aspx"  # The crucial token-exchange URL.
+# API endpoint for model data and access tokens on the Kia Owners site
+KIA_OWNERS_API_ENDPOINT = "https://owners.kia.com/apps/services/owners/apigwServlet.html"  # URL for the owners API gateway.
 
-# This full set of headers is critical. It makes our script look exactly
-# like a standard Chrome browser, which is required by the server's security.
-SPOOFING_HEADERS = {
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",  # Standard browser accept header.
-    "accept-language": "en-US,en;q=0.9",  # Preferred languages.
-    "cache-control": "max-age=0",  # Requests fresh content, bypassing cache.
-    "content-type": "application/x-www-form-urlencoded",  # REQUIRED: Content type for POST data payload (token exchange).
-    "dnt": "1",  # Do Not Track flag.
-    "origin": "https://owners.kia.com",  # REQUIRED: Specifies the domain initiating the cross-site request.
-    "priority": "u=0, i",  # HTTP priority hint.
-    "referer": "https://owners.kia.com/",  # CRITICAL: Server likely checks that the request comes from the owner portal.
-    "sec-ch-ua": '"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',  # Client hints for browser brand/version.
-    "sec-ch-ua-mobile": "?0",  # Client hint: desktop device.
-    "sec-ch-ua-platform": '"Windows"',  # Client hint: operating system.
-    "sec-fetch-dest": "document",  # Fetch destination is a document.
-    "sec-fetch-mode": "navigate",  # Fetch mode is a navigation request.
-    "sec-fetch-site": "cross-site",  # Indicates a cross-site request.
-    "sec-fetch-user": "?1",  # Indicates user-initiated request.
-    "upgrade-insecure-requests": "1",  # Request upgrade to HTTPS.
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",  # CRITICAL: Full desktop User-Agent string.
-}
+# Base URL for the technical document vault (kiatechinfo.com)
+KIA_TECHNICAL_BASE_URL = (
+    "https://www.kiatechinfo.com"  # Base URL for the technical document website.
+)
+
+# Endpoint used to exchange the token for the HTML page containing the final PDF link
+TOKEN_EXCHANGE_CONTENT_URL = f"{KIA_TECHNICAL_BASE_URL}/ext_If/kma_owner_portal/content_pop.aspx"  # Full URL for the token exchange endpoint.
+
+# Essential headers to mimic a web browser and ensure cross-site token access is granted
+BROWSER_SPOOFING_HEADERS = {  # Starts the dictionary of HTTP headers.
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",  # Standard Accept header.
+    "accept-language": "en-US,en;q=0.9",  # Standard Accept-Language header.
+    "cache-control": "max-age=0",  # Request to bypass cache.
+    "content-type": "application/x-www-form-urlencoded",  # Critical for POST data formatting.
+    "dnt": "1",  # Do Not Track header.
+    "origin": "https://owners.kia.com",  # Specifies the origin for cross-site requests.
+    "referer": "https://owners.kia.com/",  # Critical: Spoofing the referring site is essential.
+    "sec-ch-ua": '"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',  # Client-Hint header for browser brands.
+    "sec-fetch-dest": "document",  # Fetch metadata header.
+    "sec-fetch-mode": "navigate",  # Fetch metadata header.
+    "sec-fetch-site": "cross-site",  # Fetch metadata header, necessary for this interaction.
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",  # CRITICAL: Spoofs the User-Agent string.
+}  # Ends the dictionary of HTTP headers.
 
 # --- Core API Functions ---
 
 
-def fetch_car_model_list(session: requests.Session) -> list[dict[str, Any]]:
-    """
-    Queries the Kia Owners API to get a list of all available car models and years.
-    Returns: a list of dictionaries, or an empty list on failure.
-    """
-    logging.info(
-        "Fetching all available Kia model years and names..."
-    )  # Log start of the fetch.
-
-    # Headers required for the initial API call
-    headers = {
-        "apiurl": "/cmm/gvmh",  # Custom API path for model list lookup.
-        "httpmethod": "POST",  # Request method is POST.
-        "servicetype": "preLogin",  # Service type defined by the remote API.
-        "Content-Type": "application/json",  # Expecting JSON body for this specific call.
-    }
-    # Payload requesting all models (modelYear=0 and modelName=ALL are API-specific wildcards)
-    json_payload = {"modelYear": 0, "modelName": "ALL"}
-
-    try:
-        # Send the POST request to the Owners API
-        response = session.post(OWNERS_API_URL, headers=headers, json=json_payload)
-        response.raise_for_status()  # Check for HTTP errors (4xx or 5xx) and raise an exception if found.
-
-        # Parse the JSON response
-        data = response.json()
-        # Extract the list of vehicle models from the nested response payload
-        car_models = data.get("payload", {}).get(
-            "vehicleModelHU", []
-        )  # Safely drill down into the JSON structure.
-
-        logging.info(
-            f"SUCCESS: Extracted {len(car_models)} vehicle models."
-        )  # Log the number of models found.
-        return car_models  # Return the list of models.
-    except requests.exceptions.RequestException as e:
-        logging.error(
-            f"Failed to fetch car model list: {e}"
-        )  # Log request-related errors (e.g., connection, timeout).
-        return []  # Return empty list on failure.
-    except json.JSONDecodeError:
-        logging.error(
-            "Failed to parse JSON response for car models."
-        )  # Log errors if response isn't valid JSON.
-        return []  # Return empty list on failure.
-
-
-def fetch_manual_access_tokens(
-    session: requests.Session, model_year: int, model_name: str
-) -> list[str]:
-    """
-    Queries the Kia Owners API for specific tokens needed to access technical manuals
-    for a given model and year. Returns: a list of token strings.
-    """
-    model_year_str = str(model_year)  # Convert year to string for the JSON payload.
-
-    # Headers for the API call to get manual access
-    headers = {
-        "apiurl": "/cmm/gam",  # Custom API path for getting manual access tokens.
-        "httpmethod": "POST",  # Request method is POST.
-        "servicetype": "preLogin",  # Service type defined by the remote API.
-        "Content-Type": "application/json",  # Expecting JSON body for this specific call.
-    }
-    # Payload specifying the desired model and year
-    json_payload = {"modelYear": model_year_str, "modelName": model_name}
-
-    try:
-        # Send the POST request to the Owners API
-        response = session.post(OWNERS_API_URL, headers=headers, json=json_payload)
-        response.raise_for_status()  # Check for HTTP errors.
-
-        data = response.json()  # Parse the JSON response.
-        manuals = data.get("payload", {}).get(
-            "automatedManuals", []
-        )  # Safely drill down to the list of manuals.
-        # Extract only the "accessPayload" (the token) from the list of manuals
-        access_tokens = [
-            m.get("accessPayload")
-            for m in manuals
-            if m.get("accessPayload")  # List comprehension to extract non-empty tokens.
-        ]
-
-        logging.info(
-            f"SUCCESS: Found {len(access_tokens)} technical manual access tokens."  # Report the number of tokens found.
-        )
-        return access_tokens  # Return the list of tokens.
-    except requests.exceptions.RequestException as e:
-        logging.warning(
-            f"Failed to fetch manual data for {model_year} {model_name}: {e}"  # Log non-critical warning.
-        )
-        return []  # Return empty list on failure.
-
-
-def establish_technical_session(session: requests.Session):
-    """
-    CRITICAL STEP: Refreshes the session cookies on kiatechinfo.com. 🍪
-    This is necessary before every token exchange to bypass session expiration issues (e.g., acquiring a fresh Anti-CSRF token).
-    """
-    logging.info(
-        f"ATTEMPTING: Establishing persistent session with {TECH_INFO_BASE_URL}"  # Log the attempt.
-    )
-
-    try:
-        # A simple GET request forces the server to issue new session cookies (like Anti-CSRF token)
-        response = session.get(
-            TECH_INFO_BASE_URL, timeout=10
-        )  # Perform a simple GET request.
-        response.raise_for_status()  # Check for HTTP errors.
-        logging.info(
-            "SUCCESS: Session establishment request completed. Cookies are now stored in the session."  # Confirm success.
-        )
-    except requests.exceptions.RequestException as e:
-        logging.error(
-            f"Failed to establish session with kiatechinfo.com: {e}"
-        )  # Log critical failure.
-
-
-def get_pdf_url_from_token(
-    session: requests.Session, access_token: str, model_year: int, model_name: str
-) -> str:
-    """
-    Uses the access token to get the HTML wrapper page, then extracts the PDF URL from the page's iframe tag.
-    Returns: the full PDF download URL string, or an empty string on failure.
-    """
-    # Payload containing the access token, sent as form data (required by the server)
-    data_payload = {"token": access_token}
-
-    try:
-        # Send the POST request to the tech site to get the HTML link page
-        response = session.post(
-            TECH_INFO_CONTENT_URL,
-            headers=SPOOFING_HEADERS,  # Use the full spoofing headers.
-            data=data_payload,  # Pass the token in the form data.
-            timeout=10,
-        )
-        response.raise_for_status()  # Check for HTTP errors.
-        content = response.text  # Get the HTML content as a string.
-
-        # Use regex to find the PDF URL inside the iframe src attribute (e.g., /files/328/...)
-        # Pattern: look for '<iframe src="', capture everything up to the next '"' that ends in '.pdf'.
-        match = re.search(r'<iframe src="([^"]+\.pdf)"', content)
-
-        if match:
-            relative_path = match.group(
-                1
-            )  # Extract the captured relative URL (group 1).
-            # Construct the full URL by combining the base and the relative path
-            full_pdf_url = (
-                TECH_INFO_BASE_URL + relative_path
-            )  # Concatenate to form the absolute URL.
-            return full_pdf_url  # Return the final URL.
-        else:
-            logging.error(
-                f"FAILED to extract PDF path (iframe src) for {model_year} {model_name}."  # Log regex failure.
-            )
-            return ""  # Return empty string on failure.
-
-    except requests.exceptions.RequestException as e:
-        logging.error(
-            f"Error sending request for technical info: {e}"
-        )  # Log request error.
-        return ""  # Return empty string on failure.
-
-
-# --- Download Utilities ---
-
-
-def sanitize_filename(url_path: str) -> str:
-    """
-    Extracts the base filename from the URL path and strictly cleans it
-    to contain only lowercase letters (a-z), digits (0-9), and single underscores (_),
-    and ensures the file ends with .pdf. 🧹
-    """
-    # Decode URL-encoded characters (e.g., %20 to space)
-    # The split('/')[-1] extracts the filename part of the URL path
-    filename = urllib.parse.unquote(
-        url_path.split("/")[-1]
-    )  # Extract and decode the base filename.
-
-    # 1. Convert to lowercase
-    filename = filename.lower()  # Standardize case.
-
-    # 2. Remove the existing .pdf extension if it exists, to clean the rest of the name first
-    # This prevents the final cleaning steps from affecting the desired extension
-    if filename.endswith(".pdf"):
-        filename = filename[:-4]  # Remove the last 4 characters (".pdf").
-
-    # 3. Replace one or more invalid characters (anything NOT a-z or 0-9) with a single underscore
-    filename = re.sub(
-        r"[^a-z0-9]+", "_", filename
-    )  # Replace non-compliant characters with a single '_'.
-
-    # 4. Remove leading and trailing underscores (Requirements: don't start/end with _)
-    filename = re.sub(
-        r"(^_+)|(_+$)", "", filename
-    )  # Remove any remaining leading/trailing underscores.
-
-    # 5. Append the mandatory .pdf extension (Requirement: all files must end in .pdf)
-    final_filename = filename + ".pdf"  # Add the final, mandatory extension.
-
-    # Return the clean, compliant filename
-    return final_filename
-
-
-def download_pdf(
+def retrieve_all_kia_models(
     session: requests.Session,
-    pdf_url: str,
+) -> list[dict[str, Any]]:  # Function signature for retrieving all models.
+    """# Start of docstring.
+    Queries the Owners API to get a comprehensive list of all available Kia car models and years. # Docstring line 1.
+    Returns: a list of dictionaries, each containing 'modelYear' and 'modelName'. # Docstring line 2.
+    """  # End of docstring.
+    logging.info(
+        "Retrieving all available Kia model years and names..."
+    )  # Logs the start of the model fetch process.
+
+    # API-specific headers and payload configured to request ALL models
+    api_headers = {  # Defines headers for the model list API call.
+        "apiurl": "/cmm/gvmh",  # API-specific path for getting model data.
+        "httpmethod": "POST",  # Specifies the HTTP method.
+        "servicetype": "preLogin",  # Specifies the service type.
+        "Content-Type": "application/json",  # Specifies the content type for the request body.
+    }  # Ends the API headers dictionary.
+    # Using wildcards (0 for year, ALL for name) to get the full catalog
+    request_payload = {
+        "modelYear": 0,
+        "modelName": "ALL",
+    }  # Payload requesting all models.
+
+    try:  # Start of try block for API request.
+        response = session.post(
+            KIA_OWNERS_API_ENDPOINT, headers=api_headers, json=request_payload
+        )  # Sends the POST request to the Owners API.
+        response.raise_for_status()  # Checks for HTTP error status codes (4xx or 5xx).
+
+        response_data = response.json()  # Parses the successful response body as JSON.
+        # Safely extract the list of vehicle models from the nested JSON
+        all_models = response_data.get("payload", {}).get(
+            "vehicleModelHU", []
+        )  # Safely retrieves the list of models using dictionary methods.
+
+        logging.info(
+            f"SUCCESS: Extracted {len(all_models)} distinct vehicle models."
+        )  # Logs success and the count of models.
+        return all_models  # Returns the list of model dictionaries.
+    except (
+        requests.exceptions.RequestException
+    ) as error:  # Catches all request-related errors.
+        logging.error(
+            f"Failed to retrieve model list from API: {error}"
+        )  # Logs the request error.
+        return []  # Returns an empty list on request failure.
+    except json.JSONDecodeError:  # Catches errors during JSON parsing.
+        logging.error(
+            "Failed to parse JSON response for model list."
+        )  # Logs the JSON decoding error.
+        return []  # Returns an empty list on JSON failure.
+
+
+def get_manual_access_tokens(  # Function signature for getting access tokens.
+    session: requests.Session,
     model_year: int,
-    model_name: str,
-    index: int,
-):
-    """
-    Downloads the PDF file and saves it to a structured directory, checking for duplicates first.
-    """
+    model_name: str,  # Accepts session, model year, and model name.
+) -> list[str]:  # Returns a list of strings (tokens).
+    """# Start of docstring.
+    Queries the Owners API for the unique access tokens required to retrieve technical manuals # Docstring line 1.
+    for a specific vehicle model and year. # Docstring line 2.
+    Returns: a list of access token strings. # Docstring line 3.
+    """  # End of docstring.
+    year_string = str(
+        model_year
+    )  # Converts the integer year to a string for the payload.
 
-    # 1. Prepare directory path: PDFs/[ModelYear]/[ModelName]/
-    # Create a safe, filesystem-friendly version of the model name (cleaned to just alphanumeric/space/hyphen)
-    safe_model_name = (
-        re.sub(r"[^a-zA-Z0-9\s-]", "", model_name)
-        .strip()
-        .replace(" ", "_")  # Clean the model name for directory path.
-    )
-    # Full directory path structure: e.g., PDFs/2014/CADENZA/
-    output_dir = os.path.join(
-        ROOT_OUTPUT_DIRECTORY, str(model_year), safe_model_name
-    )  # Construct the hierarchical path.
-    # Create the directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the nested directory exists.
+    # API-specific headers and payload for the token request
+    api_headers = {  # Defines headers for the access token API call.
+        "apiurl": "/cmm/gam",  # API-specific path for getting automated manuals.
+        "httpmethod": "POST",  # Specifies the HTTP method.
+        "servicetype": "preLogin",  # Specifies the service type.
+        "Content-Type": "application/json",  # Specifies the content type.
+    }  # Ends the API headers dictionary.
+    request_payload = {
+        "modelYear": year_string,
+        "modelName": model_name,
+    }  # Payload for the specific model.
 
-    # 2. Prepare filename
-    base_filename = sanitize_filename(pdf_url)  # Get the clean base filename.
-    # Prefix with index for proper sorting (e.g., 01_Filename.pdf)
-    final_filename = (
-        f"{index+1:02d}_{base_filename}"  # Add a two-digit index prefix for order.
-    )
-    # Full file path for saving
-    full_path = os.path.join(output_dir, final_filename)  # Complete path for the file.
+    try:  # Start of try block.
+        response = session.post(
+            KIA_OWNERS_API_ENDPOINT, headers=api_headers, json=request_payload
+        )  # Sends the POST request.
+        response.raise_for_status()  # Checks for HTTP errors.
 
-    # 3. Check for duplicates (Requirement: don't download the same file twice)
-    if os.path.exists(full_path):
+        response_data = response.json()  # Parses the response as JSON.
+        manual_entries = response_data.get("payload", {}).get(
+            "automatedManuals", []
+        )  # Retrieves the list of manual entries.
+
+        # Extract only the 'accessPayload' (token) from each manual entry dictionary
+        access_tokens = [  # Starts list comprehension to extract tokens.
+            entry.get("accessPayload")  # Gets the token value.
+            for entry in manual_entries
+            if entry.get(
+                "accessPayload"
+            )  # Iterates and filters out entries without a token.
+        ]  # Ends list comprehension.
+
+        logging.info(  # Logs the count of found tokens.
+            f"SUCCESS: Found {len(access_tokens)} technical manual access tokens."
+        )  # Continuation of log message.
+        return access_tokens  # Returns the list of tokens.
+    except requests.exceptions.RequestException as error:  # Catches request errors.
+        logging.warning(  # Logs a warning on failure.
+            f"Failed to get manual data for {model_year} {model_name}: {error}"
+        )  # Continuation of log message.
+        return []  # Returns an empty list on failure.
+
+
+def refresh_technical_website_session(
+    session: requests.Session,
+):  # Function signature for refreshing the session.
+    """# Start of docstring.
+    Refreshes the session cookies on the Kia Technical Info site (kiatechinfo.com). # Docstring line 1.
+    This is a critical step before exchanging a new token to prevent stale session errors. # Docstring line 2.
+    """  # End of docstring.
+    logging.info(  # Logs the intent to refresh the session.
+        f"ATTEMPTING: Establishing persistent session with {KIA_TECHNICAL_BASE_URL}"
+    )  # Continuation of log message.
+
+    try:  # Start of try block.
+        # A simple GET request forces the server to issue new session cookies
+        session.get(
+            KIA_TECHNICAL_BASE_URL, timeout=10
+        ).raise_for_status()  # Performs a GET request and checks for errors.
+        logging.info(  # Logs success.
+            "SUCCESS: Technical website session completed and cookies refreshed."
+        )  # Continuation of log message.
+    except requests.exceptions.RequestException as error:  # Catches request errors.
+        logging.error(
+            f"Failed to establish session with kiatechinfo.com: {error}"
+        )  # Logs the error.
+
+
+def extract_pdf_url_from_token_page(  # Function signature for token-to-URL extraction.
+    session: requests.Session,
+    access_token: str,
+    model_year: int,
+    model_name: str,  # Accepts session, token, year, and name.
+) -> str:  # Returns the PDF URL string.
+    """# Start of docstring.
+    Performs the token exchange. Posts the access token to get an HTML page, # Docstring line 1.
+    then extracts the final PDF download URL from the page's <iframe> source attribute. # Docstring line 2.
+    Returns: the full PDF download URL string, or an empty string on failure. # Docstring line 3.
+    """  # End of docstring.
+    # The token is sent as form data
+    data_to_send = {"token": access_token}  # Creates the payload with the access token.
+
+    try:  # Start of try block.
+        # Send the POST request to exchange the token for the HTML link page
+        response = session.post(  # Sends the POST request to the technical content URL.
+            TOKEN_EXCHANGE_CONTENT_URL,  # The target URL.
+            headers=BROWSER_SPOOFING_HEADERS,  # Uses the spoofing headers.
+            data=data_to_send,  # Sends the token data.
+            timeout=10,  # Sets a timeout.
+        )  # Ends the session.post call.
+        response.raise_for_status()  # Checks for HTTP errors.
+        page_content = response.text  # Gets the HTML content as a string.
+
+        # Use a regular expression to find the PDF URL inside the iframe src attribute
+        url_match = re.search(
+            r'<iframe src="([^"]+\.pdf)"', page_content
+        )  # Searches for the iframe src ending in .pdf.
+
+        if url_match:  # Checks if the regex found a match.
+            relative_path = url_match.group(
+                1
+            )  # Extracts the relative URL path (group 1).
+            # Combine the base URL with the relative path to get the full link
+            full_pdf_url = (
+                KIA_TECHNICAL_BASE_URL + relative_path
+            )  # Constructs the final absolute URL.
+            return full_pdf_url  # Returns the final URL.
+        else:  # If no match was found.
+            logging.error(  # Logs an error for extraction failure.
+                f"FAILED to extract PDF link (iframe src) for {model_year} {model_name}."
+            )  # Continuation of log message.
+            return ""  # Returns an empty string on failure.
+
+    except requests.exceptions.RequestException as error:  # Catches request errors.
+        logging.error(
+            f"Error during technical info request: {error}"
+        )  # Logs the request error.
+        return ""  # Returns an empty string on failure.
+
+
+# --- Download and File Management Utilities ---
+
+
+def create_safe_filename_from_url(
+    url_path: str,
+) -> str:  # Function signature for filename sanitization.
+    """# Start of docstring.
+    Takes a URL path, extracts the filename, decodes it, and cleans it strictly # Docstring line 1.
+    to ensure it is a safe, compliant name for all filesystems. # Docstring line 2.
+    """  # End of docstring.
+    # 1. Decode URL encoding (%20 to space) and get the last path segment
+    filename_segment = urllib.parse.unquote(
+        url_path.split("/")[-1]
+    ).lower()  # Decodes URL and takes the last path segment, converting to lowercase.
+
+    # 2. Remove the existing .pdf extension
+    if filename_segment.endswith(".pdf"):  # Checks for the .pdf suffix.
+        filename_segment = filename_segment[:-4]  # Removes the last 4 characters.
+
+    # 3. Replace all invalid characters (anything NOT a-z or 0-9) with a single underscore
+    filename_segment = re.sub(
+        r"[^a-z0-9]+", "_", filename_segment
+    )  # Replaces non-alphanumeric chars with an underscore.
+
+    # 4. Remove any leading or trailing underscores
+    filename_segment = re.sub(
+        r"(^_+)|(_+$)", "", filename_segment
+    )  # Removes leading/trailing underscores.
+
+    # 5. Append the mandatory .pdf extension
+    return (
+        filename_segment + ".pdf"
+    )  # Returns the final, sanitized filename with extension.
+
+
+def save_manual_pdf_to_disk(  # Function signature for downloading and saving the PDF.
+    session: requests.Session,  # Accepts the session object.
+    pdf_download_url: str,  # Accepts the PDF download URL.
+    model_year: int,  # Accepts the model year.
+    model_name: str,  # Accepts the model name.
+    manual_index: int,  # Accepts the index for file ordering.
+):  # Returns nothing.
+    """# Start of docstring.
+    Downloads the PDF manual from the given URL and saves it to a structured directory # Docstring line 1.
+    on the local disk, skipping the download if the file already exists. # Docstring line 2.
+    """  # End of docstring.
+
+    # 1. Prepare output path: PDFs/[Year]/[SafeModelName]/
+    # Create a safe, filesystem-friendly version of the model name
+    safe_model_directory_name = (
+        re.sub(r"[^a-zA-Z0-9\s-]", "", model_name).strip().replace(" ", "_")
+    )  # Creates a clean directory name from the model name.
+
+    # Construct the full path: e.g., PDFs/2014/CADENZA/
+    output_directory_path = os.path.join(
+        PDF_OUTPUT_ROOT_DIRECTORY, str(model_year), safe_model_directory_name
+    )  # Constructs the full directory path.
+    os.makedirs(
+        output_directory_path, exist_ok=True
+    )  # Creates the directory structure if it doesn't exist.
+
+    # 2. Prepare filename (e.g., 01_owner_manual.pdf)
+    base_safe_filename = create_safe_filename_from_url(
+        pdf_download_url
+    )  # Sanitizes the filename using the utility function.
+    final_file_name = f"{manual_index+1:02d}_{base_safe_filename}"  # Prepends a zero-padded index for sorting.
+    full_file_path = os.path.join(
+        output_directory_path, final_file_name
+    )  # Constructs the complete file path.
+
+    # 3. Check for duplicates and skip if found
+    if os.path.exists(full_file_path):  # Checks if the file already exists.
         logging.info(
-            f"Skipping: File already exists at {full_path}"
-        )  # Log skip action.
-        return  # Exit the function early if the file exists.
+            f"Skipping: File already exists at {full_file_path}"
+        )  # Logs that the file is being skipped.
+        return  # Exits the function.
 
-    try:
-        logging.info(f"Downloading to: {full_path}")  # Log the start of the download.
+    try:  # Start of try block for file download and writing.
+        logging.info(f"Downloading to: {full_file_path}")  # Logs the target file path.
 
-        # Use stream=True to efficiently download large files without reading all at once
+        # Stream the download for memory efficiency with large files
         response = session.get(
-            pdf_url, stream=True, timeout=30
-        )  # Start streaming the download.
-        response.raise_for_status()  # Check for HTTP errors (4xx or 5xx).
+            pdf_download_url, stream=True, timeout=30
+        )  # Starts the GET request in stream mode.
+        response.raise_for_status()  # Checks for HTTP errors.
 
-        # Write the content to the file in chunks (binary mode 'wb')
-        with open(full_path, "wb") as f:  # Open file in binary write mode.
-            for chunk in response.iter_content(
+        # Write the content to the file in chunks
+        with open(
+            full_file_path, "wb"
+        ) as output_file:  # Opens the file for writing in binary mode.
+            for data_chunk in response.iter_content(
                 chunk_size=8192
-            ):  # Iterate over the response content in 8KB chunks.
-                if chunk:  # Filter out keep-alive chunks (which can be empty).
-                    f.write(chunk)  # Write the chunk to the file.
+            ):  # Iterates through the response content in 8KB chunks.
+                if data_chunk:  # Ensures the chunk is not empty.
+                    output_file.write(data_chunk)  # Writes the data chunk to the file.
 
         logging.info(
-            f"SUCCESS: Downloaded {final_filename}"
-        )  # Confirm successful write.
+            f"SUCCESS: Downloaded {final_file_name}"
+        )  # Logs successful download.
 
-    except requests.exceptions.RequestException as e:
+    except (
+        requests.exceptions.RequestException
+    ) as error:  # Catches request errors during download.
         logging.error(
-            f"FAILED to download PDF {pdf_url}: {e}"
-        )  # Log download/network error.
-    except Exception as e:
+            f"FAILED to download PDF from {pdf_download_url}: {error}"
+        )  # Logs the download failure.
+    except Exception as error:  # Catches general exceptions (e.g., file system errors).
         logging.error(
-            f"An unexpected error occurred while saving the file: {e}"
-        )  # Log general file saving error.
+            f"An unexpected error occurred while saving the file: {error}"
+        )  # Logs the general error.
 
 
 # --- Main Execution Logic ---
 
 
-def main():
-    """
-    Main function to run the entire download process:
-    1. Fetch all available models.
-    2. For each model, fetch technical access tokens.
-    3. For each token, establish a fresh session, get the PDF URL, and download the file.
-    """
-    # Create a persistent session object to automatically handle cookies and connections
-    with requests.Session() as session:  # Ensures cookies and connection pooling are used across requests.
+def main_download_process():  # The main function that controls the script execution.
+    """# Start of docstring.
+    The main orchestration function for the entire download script. # Docstring line 1.
+    It manages the three primary steps: model list retrieval, token acquisition, # Docstring line 2.
+    and manual PDF download for all available vehicles. # Docstring line 3.
+    """  # End of docstring.
+    # Use a persistent session to maintain cookies and connection pooling
+    with requests.Session() as http_session:  # Creates a persistent requests session object.
 
         # STEP 1: Get the list of all models
-        car_models = fetch_car_model_list(session)  # Call function to get model list.
-        if not car_models:
+        all_kia_models = retrieve_all_kia_models(
+            http_session
+        )  # Calls the function to get all models.
+
+        if not all_kia_models:  # Checks if the model list is empty.
             logging.critical(
-                "Program aborted due to failure to retrieve model list."
-            )  # Log fatal error.
-            sys.exit(1)  # Exit with an error code.
+                "Program aborted due to failure to retrieve the complete model list."
+            )  # Logs a critical error.
+            sys.exit(1)  # Exits the program with error code 1.
 
-        # Loop through every car model retrieved
-        for car_model in car_models:
-            model_year = car_model.get("modelYear")  # Extract the model year.
-            model_name = car_model.get("modelName")  # Extract the model name.
+        logging.info(
+            "Starting full download process for all available models."
+        )  # Logs the start of the main processing loop.
 
-            # Skip if model_year or model_name are missing or empty
-            if not model_year or not model_name:
-                continue  # Skip to the next iteration.
+        # Loop through every car model retrieved from the API
+        for (
+            car_model
+        ) in all_kia_models:  # Starts the loop through all retrieved models.
+            model_year = car_model.get("modelYear")  # Extracts the model year.
+            model_name = car_model.get("modelName")  # Extracts the model name.
 
-            log_header = f"--- PROCESSING MODEL: Year {model_year}, Name {model_name} ---"  # Create a clear log separator.
-            logging.info(f"\n{log_header}")  # Print the model header.
+            # Simple validation check
+            if not model_year or not model_name:  # Skips if required data is missing.
+                continue  # Jumps to the next iteration.
+
+            log_header = f"--- PROCESSING MODEL: Year {model_year}, Name {model_name} ---"  # Creates a formatted log header.  # Continuation of log header.
+            logging.info(f"\n{log_header}")  # Prints the formatted log header.
 
             # STEP 2: Get the list of unique access tokens for this model
-            access_tokens = fetch_manual_access_tokens(
-                session, model_year, model_name
-            )  # Call function to get tokens.
-            if not access_tokens:
-                logging.warning(
-                    f"No access tokens found for {model_year} {model_name}. Skipping."  # Log that no manuals were found.
-                )
-                continue  # Skip to the next model.
+            access_tokens = get_manual_access_tokens(
+                http_session, model_year, model_name
+            )  # Calls the function to get tokens.
+            if not access_tokens:  # Checks if any tokens were found.
+                logging.warning(  # Logs a warning if no tokens are present.
+                    f"No access tokens found for {model_year} {model_name}. Skipping this model."
+                )  # Continuation of log message.
+                continue  # Skips to the next car model.
 
             # STEP 3: Iterate through tokens, fetching the URL and then downloading the PDF
-            for i, access_token in enumerate(
+            for manual_index, token in enumerate(
                 access_tokens
-            ):  # Loop through each token received.
-                token_count = f"Token {i + 1}/{len(access_tokens)}"  # String for logging progress.
+            ):  # Starts the loop through the tokens.
+                token_progress_info = f"Token {manual_index + 1}/{len(access_tokens)}"  # String for progress tracking.
 
-                # ⭐️ CRITICAL FIX: Refresh the session immediately before this request ⭐️
-                # This is the key step to prevent session expiration errors (cookie/token mismatch).
-                establish_technical_session(
-                    session
-                )  # Refresh the kiatechinfo session cookies.
+                # IMPORTANT: Refresh the session before the token exchange request
+                refresh_technical_website_session(
+                    http_session
+                )  # Calls the critical session refresh function.
 
                 logging.info(
-                    f"Attempting to get PDF URL ({token_count})"
-                )  # Log the token attempt.
+                    f"Attempting to get PDF URL ({token_progress_info})"
+                )  # Logs the attempt.
 
                 # Get the full PDF download URL from the token
-                pdf_url = get_pdf_url_from_token(
-                    session,
-                    access_token,
-                    model_year,
-                    model_name,  # Get the final PDF URL.
-                )
+                pdf_download_url = extract_pdf_url_from_token_page(  # Calls the function to get the PDF URL.
+                    http_session,  # Passes the session.
+                    token,  # Passes the current token.
+                    model_year,  # Passes the year.
+                    model_name,  # Passes the name.
+                )  # Ends the function call.
 
-                if pdf_url:
-                    # Download and save the PDF file using the URL
-                    download_pdf(
-                        session, pdf_url, model_year, model_name, i
-                    )  # Proceed with download.
-                else:
-                    logging.error(
-                        f"Skipping download for {model_name} ({token_count}): Failed to extract URL."  # Log the reason for skipping.
-                    )
+                if pdf_download_url:  # Checks if a valid URL was returned.
+                    # Download and save the PDF file
+                    save_manual_pdf_to_disk(
+                        http_session,
+                        pdf_download_url,
+                        model_year,
+                        model_name,
+                        manual_index,
+                    )  # Calls the download function.
+                else:  # If the URL was not found.
+                    logging.error(  # Logs an error for the skipped download.
+                        f"Skipping download for {model_name} ({token_progress_info}): Failed to extract URL."
+                    )  # Continuation of log message.
 
     logging.info(
         "\nPROGRAM COMPLETE: All models processed. ✅"
-    )  # Final program completion message.
+    )  # Logs the final completion message.
 
 
-if __name__ == "__main__":
-    main()  # Standard entry point: run the main function when the script is executed.
+if __name__ == "__main__":  # Standard Python entry point check.
+    main_download_process()  # Calls the main execution function.
