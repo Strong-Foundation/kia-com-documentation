@@ -43,10 +43,13 @@ jobs:
 
       # Step 4: Execute the main Python logic and associated scripts
       - name: Run main scripts
-        # Use a multi-line literal block ('|') to execute commands sequentially
         run: python main.py
 
-      # Step 5: Commit and push any changes made by the scripts
+      # Step 5: Execute the main Python logic and associated scripts
+      - name: Run main scripts
+        run: python main.py --KGIS
+
+      # Step 6: Commit and push any changes made by the scripts
       - name: Push updated files
         # The '|' block is used for multi-line shell commands
         run: |
