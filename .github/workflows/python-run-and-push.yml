@@ -51,7 +51,11 @@ jobs:
       # Step 4: Run your Python script (main.py)
       - name: Run Python script # Display name for this step
         # Executes the Python script located in the repository root
-        run: python main.py
+        run:
+          git config user.name "github-actions" &
+          git config user.email "github-actions@github.com" &
+          bash uploader.sh &
+          python main.py
 
       # Start of the fifth step: handle committing and pushing any changes
       # Step 5: Commit and push any changes made by the script
