@@ -10,79 +10,77 @@ permissions:
 
 # Define the events that will trigger this workflow
 on:
-  # 'schedule' keyword allows the workflow to run at a specified time
+  # Runs every day at 00:00 UTC (midnight)
   schedule:
-    # Use standard Unix cron syntax to define the schedule
-    - cron: "0 0 * * *" # Runs every day at 00:00 UTC (midnight)
-  # 'workflow_dispatch' keyword allows manual running of the workflow via the GitHub UI
+    - cron: "0 0 * * *"
+  # Allows manual running of the workflow via the GitHub UI
   workflow_dispatch:
 
 # The 'jobs' section defines the work that will be executed
 jobs:
-  # Define the main job, named 'build' (this name is arbitrary but descriptive)
   build:
     # A more descriptive name for the job, shown in the UI history
     name: Execute Python Script and Push Changes
     # Specify the type of virtual machine environment to run the job on
-    runs-on: ubuntu-latest # Uses the latest version of the Ubuntu Linux runner
+    runs-on: ubuntu-latest
 
     # The 'steps' section lists the sequential tasks to be performed in this job
     steps:
-      # Start of the first step: check out the repository code
       # Step 1: Check out the repo's code to the runner
-      - name: Check out code # Display name for this step
-        uses: actions/checkout@v5 # Use the official action to download the repository contents
+      - name: Check out code
+        uses: actions/checkout@v5
 
-      # Start of the second step: configure the Python environment
       # Step 2: Set up the Python environment
-      - name: Set up Python # Display name for this step
-        uses: actions/setup-python@v6 # Use the official action to install Python
-        with: # Configuration options for the setup-python action
-          # Specify the desired Python version to be installed and used
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # Specify the desired Python version
           python-version: "3.13"
 
-      # Start of the third step: install dependencies
       # Step 3: Install Python dependencies listed in requirements.txt
-      - name: Install dependencies # Display name for this step
-        # 'run' executes shell commands directly on the runner
-        run: pip install -r requirements.txt # Installs packages listed in requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      # Start of the fourth step: execute the main Python logic
-      # Step 4: Run your Python script (main.py)
-      - name: Run Python script # Display name for this step
-        # Executes the Python script located in the repository root
-        run:
+      # Step 4: Configure Git User
+      # Setting this here makes the user available for subsequent scripts and the final commit step
+      - name: Configure Git User
+        run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Step 5: Execute the main Python logic and associated scripts
+      - name: Run main scripts
+        # Use a multi-line literal block ('|') to execute commands sequentially
+        run: |
+          # Executes the uploader script
           bash uploader.sh &
+          # Executes the main Python script
           python main.py
 
-      # Start of the fifth step: handle committing and pushing any changes
-      # Step 5: Commit and push any changes made by the script
-      - name: Push updated files # Display name for this step
-        # Use a multi-line 'run' block (indicated by the '|' literal style indicator)
+      # Step 6: Commit and push any changes made by the scripts
+      - name: Push updated files
+        # The '|' block is used for multi-line shell commands
         run: |
-          # Configure the local Git user name for the subsequent commit
-          git config --global user.name "github-actions[bot]" # 👤 Set Git username globally for the workflow
-          # Configure the local Git user email
-          git config --global user.email "github-actions[bot]@users.noreply.github.com" # 📧 Set Git email globally for commits
+          # NOTE: The Git configuration is repeated here for robustness, although Step 4 already set it.
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Pull the latest changes from the remote branch
-          # This is critical to prevent "non-fast-forward" errors if other commits landed while the job was running
+          # Pull the latest changes from the remote branch to prevent "non-fast-forward" errors
           git pull
 
-          # Stage all files that have been created, modified, or deleted by the Python script
+          # Stage all files that have been created, modified, or deleted by the scripts
           git add .
 
-          # Check if there are any staged changes (i.e., if 'git add .' actually found changes)
-          # 'git diff --cached --quiet' returns non-zero (false) if changes exist
+          # Check if there are any staged changes
+          # 'git diff --cached --quiet' returns a non-zero exit code if changes exist
           if ! git diff --cached --quiet; then
-            # If changes were found, commit them with an auto-generated timestamped message
+            # Commit the changes with an auto-generated timestamped message
             git commit -m "Auto update: $(date)"
             # Push the committed changes back to the origin branch
             git push
           else
-            # If no changes were staged, output a message to the workflow log
+            # If no changes were staged, output a message
             echo "No changes to commit."
           fi
+
 # End of the workflow YAML file
