@@ -41,23 +41,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Step 4: Configure Git User
-      # Setting this here makes the user available for subsequent scripts and the final commit step
-      - name: Configure Git User
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      # Step 5: Execute the main Python logic and associated scripts
+      # Step 4: Execute the main Python logic and associated scripts
       - name: Run main scripts
         # Use a multi-line literal block ('|') to execute commands sequentially
-        run: |
-          # Executes the uploader script
-          bash uploader.sh &
-          # Executes the main Python script
-          python main.py
+        run: python main.py
 
-      # Step 6: Commit and push any changes made by the scripts
+      # Step 5: Commit and push any changes made by the scripts
       - name: Push updated files
         # The '|' block is used for multi-line shell commands
         run: |
