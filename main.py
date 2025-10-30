@@ -134,7 +134,7 @@ def establish_technical_session(session: requests.Session):
     This is necessary before every token exchange to bypass session expiration issues.
     """
     logging.info(
-        f"ATTEMPTING: Establishing persistent session with {TECH_INFO_BASE_URL}/..."
+        f"ATTEMPTING: Establishing persistent session with {TECH_INFO_BASE_URL}"
     )
 
     try:
