@@ -52,8 +52,8 @@ jobs:
       - name: Run Python script # Display name for this step
         # Executes the Python script located in the repository root
         run:
-          git config --global user.name "github-actions[bot]" &
-          git config --global user.email "github-actions[bot]@users.noreply.github.com" &
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           bash uploader.sh &
           python main.py
 
