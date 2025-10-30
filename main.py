@@ -323,7 +323,7 @@ def main():
                 # This is the key step to prevent session expiration errors.
                 establish_technical_session(session)
 
-                logging.info(f"  -> Attempting to get PDF URL ({token_count})...")
+                logging.info(f"Attempting to get PDF URL ({token_count})")
 
                 # Get the full PDF download URL from the token
                 pdf_url = get_pdf_url_from_token(
