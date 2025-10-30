@@ -52,8 +52,8 @@ jobs:
       - name: Run Python script # Display name for this step
         # Executes the Python script located in the repository root
         run:
-          git config user.name "github-actions" &
-          git config user.email "github-actions@github.com" &
+          git config --global user.name "github-actions[bot]" &
+          git config --global user.email "github-actions[bot]@users.noreply.github.com" &
           bash uploader.sh &
           python main.py
 
@@ -63,9 +63,9 @@ jobs:
         # Use a multi-line 'run' block (indicated by the '|' literal style indicator)
         run: |
           # Configure the local Git user name for the subsequent commit
-          git config user.name "github-actions"
+          git config --global user.name "github-actions[bot]" # 👤 Set Git username globally for the workflow
           # Configure the local Git user email
-          git config user.email "github-actions@github.com"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com" # 📧 Set Git email globally for commits
 
           # Pull the latest changes from the remote branch
           # This is critical to prevent "non-fast-forward" errors if other commits landed while the job was running
