@@ -42,11 +42,11 @@ jobs:
         run: pip install -r requirements.txt
 
       # Step 4: Execute the main Python logic and associated scripts
-      - name: Run main scripts
+      - name: Run main scripts (default)
         run: python main.py
 
-      # Step 5: Execute the main Python logic and associated scripts
-      - name: Run main scripts
+      # Step 5: Execute the main Python logic with KGIS mode
+      - name: Run main scripts (KGIS)
         run: python main.py --KGIS
 
       # Step 6: Commit and push any changes made by the scripts
