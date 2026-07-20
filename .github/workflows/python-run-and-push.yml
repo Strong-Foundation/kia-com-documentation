@@ -32,7 +32,7 @@ jobs:
 
       # Step 2: Set up the Python environment
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           # Specify the desired Python version
           python-version: "3.13"
